@@ -1,0 +1,44 @@
+@import 'variables';
+@import 'utilities/reset';
+@import 'utilities/skeleton';
+@import 'utilities/normalize';
+
+body {
+  background-color: $gray-light;
+  color: $gray-dark;
+  margin: 0;
+  -webkit-overflow-scrolling: touch;
+
+  &.modal-open {
+    overflow: hidden;
+  }
+  &.ios {
+    padding-bottom: 1px;
+  }
+  &.iphone {
+    .location__details {
+      overflow-y: initial;
+    }
+  }
+  &.ipad {
+    .location__navigation {
+      left: 5vh;
+      top: 12px;
+      width: 90vh;
+    }
+  }
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+// #content {
+//   overflow-x: hidden;
+// }
+
+@keyframes spin {
+  0% { transform: rotate(0); }
+  50% { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+}

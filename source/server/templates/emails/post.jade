@@ -1,0 +1,14 @@
+extends ../layouts/default
+
+block body-contents
+  div
+    h2 New Post
+
+    h3 #{object.title}
+    h4 #{object.author}
+    p #{object.body}
+
+    p &nbsp;
+
+    if admin
+      | <a href="#{'/keystone/posts/' + object.id}">View this post in Keystone</a>

@@ -1,0 +1,136 @@
+/* global __DEVELOPMENT__ */
+
+import React from 'react';
+import ReactDOM from 'react-dom/server';
+import config from '../config';
+import favicon from 'serve-favicon';
+import compression from 'compression';
+import path from 'path';
+import createStore from '../utilities/createStore';
+import ApiClient from '../helpers/ApiClient';
+import Html from '../helpers/Html';
+import PrettyError from 'pretty-error';
+
+// Keystone import
+import Keystone from 'keystone';
+import cookieParser from 'cookie-parser';
+
+import { ReduxRouter } from 'redux-router';
+import createHistory from 'history/lib/createMemoryHistory';
+import { reduxReactRouter, match } from 'redux-router/server';
+import { Provider } from 'react-redux';
+import qs from 'query-string';
+import getRoutes from '../routes';
+import getStatusFromRoutes from '../helpers/getStatusFromRoutes';
+
+const pretty = new PrettyError();
+
+Keystone.init({
+  'name': config.app.title,
+  'brand': config.app.title,
+  'signin logo': ['/logo.jpg', 100, 100],
+  'view engine': 'jade',
+  'emails': 'templates/emails',
+  'session': false,
+  'updates': 'updates',
+  'auth': true,
+  'user model': 'User',
+  'auto update': true,
+  'cookie secret': process.env.COOKIE_SECRET,
+  'headless': process.env.DISABLE_KEYSTONE
+});
+Keystone.set('routes', require('./routes'));
+Keystone.set('port', config.port);
+Keystone.import('models');
+
+// Email setup
+if (__DEVELOPMENT__) {
+  Keystone.set('email tests', require('./routes/emails'));
+}
+Keystone.set('email rules', [{
+  find: '/dist/',
+  replace: config.baseURL + '/dist/'
+}, {
+  find: '/keystone/',
+  replace: config.baseURL + '/keystone/'
+}]);
+
+Keystone.set('google api key', process.env.GMAPS_BROWSER_KEY);
+Keystone.set('google server api key', process.env.GMAPS_SERVER_KEY);
+Keystone.set('default region', 'us');
+
+Keystone.start({
+  onMount: () => {
+    console.info('----\n==> ✅  %s is running with Keystone.', config.app.title);
+    console.info('==> 💻  Open http://localhost:%s in a browser to view the app.', config.port);
+
+    const app = Keystone.app;
+
+    app.use(compression());
+    app.use(favicon(path.join(__dirname, '../../', 'static', 'favicon.ico')));
+
+    app.use(require('serve-static')(path.join(__dirname, '../../', 'static')));
+
+    app.use(cookieParser(process.env.COOKIE_SECRET));
+
+    app.use((req, res) => {
+      if (__DEVELOPMENT__) {
+        // Do not cache webpack stats: the script file would change since
+        // hot module replacement is enabled in the development env
+        webpackIsomorphicTools.refresh();
+        res.header('Access-Control-Allow-Origin', '*');
+      }
+      const client = new ApiClient(req);
+
+      const store = createStore(reduxReactRouter, getRoutes, createHistory, client);
+
+      function hydrateOnClient() {
+        res.send('<!doctype html>\n' +
+          ReactDOM.renderToString(<Html assets={webpackIsomorphicTools.assets()} store={store}/>));
+      }
+
+      if (__DISABLE_SSR__) {
+        hydrateOnClient();
+        return;
+      }
+
+      store.dispatch(match(req.originalUrl, (error, redirectLocation, routerState) => {
+        if (redirectLocation) {
+          res.redirect(redirectLocation.pathname + redirectLocation.search);
+        } else if (error) {
+          console.error('ROUTER ERROR:', pretty.render(error));
+          res.status(500);
+          hydrateOnClient();
+        } else if (!routerState) {
+          res.status(500);
+          hydrateOnClient();
+        } else {
+          // Workaround redux-router query string issue:
+          // https://github.com/rackt/redux-router/issues/106
+          if (routerState.location.search && !routerState.location.query) {
+            routerState.location.query = qs.parse(routerState.location.search);
+          }
+
+          store.getState().router.then(() => {
+            const component = (
+              <Provider store={store} key="provider">
+                <ReduxRouter store={store} />
+              </Provider>
+            );
+
+            const status = getStatusFromRoutes(routerState.routes);
+            if (status) {
+              res.status(status);
+            }
+            res.send('<!doctype html>\n' +
+              ReactDOM.renderToString(<Html assets={webpackIsomorphicTools.assets()} component={component} store={store}/>));
+          }).catch((err) => {
+            console.error('DATA FETCHING ERROR:', pretty.render(err));
+            res.status(500);
+            hydrateOnClient();
+          });
+        }
+      }));
+    });
+  }
+});
