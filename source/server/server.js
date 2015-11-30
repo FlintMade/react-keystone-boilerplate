@@ -55,8 +55,6 @@ Keystone.set('email rules', [{
   replace: config.baseURL + '/keystone/'
 }]);
 
-Keystone.set('google api key', process.env.GMAPS_BROWSER_KEY);
-Keystone.set('google server api key', process.env.GMAPS_SERVER_KEY);
 Keystone.set('default region', 'us');
 
 Keystone.start({
